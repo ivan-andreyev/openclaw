@@ -75,4 +75,34 @@ describe("resolveMessagingTarget (directory fallback)", () => {
     expect(mocks.listGroups).not.toHaveBeenCalled();
     expect(mocks.listGroupsLive).not.toHaveBeenCalled();
   });
+
+  it("recognizes Telegram topic format (chatId:topicId)", async () => {
+    const result = await resolveMessagingTarget({
+      cfg,
+      channel: "telegram",
+      input: "-1003707749614:53",
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.target.source).toBe("normalized");
+      expect(result.target.to).toBe("-1003707749614:53");
+    }
+    expect(mocks.listGroups).not.toHaveBeenCalled();
+  });
+
+  it("recognizes Telegram explicit topic format (chatId:topic:topicId)", async () => {
+    const result = await resolveMessagingTarget({
+      cfg,
+      channel: "telegram",
+      input: "-1003707749614:topic:53",
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.target.source).toBe("normalized");
+      expect(result.target.to).toBe("-1003707749614:topic:53");
+    }
+    expect(mocks.listGroups).not.toHaveBeenCalled();
+  });
 });

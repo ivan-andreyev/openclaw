@@ -369,6 +369,10 @@ export async function resolveMessagingTarget(params: {
       }
       return true;
     }
+    // Telegram topic format: -1234567890:53 or -1234567890:topic:53
+    if (/^-?\d+:(topic:)?\d+$/.test(trimmed)) {
+      return true;
+    }
     if (trimmed.includes("@thread")) {
       return true;
     }
