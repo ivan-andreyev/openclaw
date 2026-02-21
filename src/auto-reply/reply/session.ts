@@ -1,10 +1,12 @@
+import { CURRENT_SESSION_VERSION, SessionManager } from "@mariozechner/pi-coding-agent";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { CURRENT_SESSION_VERSION, SessionManager } from "@mariozechner/pi-coding-agent";
+import type { OpenClawConfig } from "../../config/config.js";
+import type { TtsAutoMode } from "../../config/types.tts.js";
+import type { MsgContext, TemplateContext } from "../templating.js";
 import { resolveSessionAgentId } from "../../agents/agent-scope.js";
 import { normalizeChatType } from "../../channels/chat-type.js";
-import type { OpenClawConfig } from "../../config/config.js";
 import {
   DEFAULT_RESET_TRIGGERS,
   deriveSessionMetaPatch,
@@ -24,14 +26,12 @@ import {
   type SessionScope,
   updateSessionStore,
 } from "../../config/sessions.js";
-import type { TtsAutoMode } from "../../config/types.tts.js";
 import { archiveSessionTranscripts } from "../../gateway/session-utils.fs.js";
 import { deliverSessionMaintenanceWarning } from "../../infra/session-maintenance-warning.js";
 import { getGlobalHookRunner } from "../../plugins/hook-runner-global.js";
 import { normalizeMainKey } from "../../routing/session-key.js";
 import { normalizeSessionDeliveryFields } from "../../utils/delivery-context.js";
 import { resolveCommandAuthorization } from "../command-auth.js";
-import type { MsgContext, TemplateContext } from "../templating.js";
 import { normalizeInboundTextNewlines } from "./inbound-text.js";
 import { stripMentions, stripStructuralPrefixes } from "./mentions.js";
 
@@ -123,13 +123,7 @@ export async function initSessionState(params: {
   const sessionScope = sessionCfg?.scope ?? "per-sender";
   const storePath = resolveStorePath(sessionCfg?.store, { agentId });
 
-  // CRITICAL: Skip cache to ensure fresh data when resolving session identity.
-  // Stale cache (especially with multiple gateway processes or on Windows where
-  // mtime granularity may miss rapid writes) can cause incorrect sessionId
-  // generation, leading to orphaned transcript files. See #17971.
-  const sessionStore: Record<string, SessionEntry> = loadSessionStore(storePath, {
-    skipCache: true,
-  });
+  const sessionStore: Record<string, SessionEntry> = loadSessionStore(storePath);
   let sessionKey: string | undefined;
   let sessionEntry: SessionEntry;
 
@@ -256,8 +250,6 @@ export async function initSessionState(params: {
       persistedVerbose = entry.verboseLevel;
       persistedReasoning = entry.reasoningLevel;
       persistedTtsAuto = entry.ttsAuto;
-      persistedModelOverride = entry.modelOverride;
-      persistedProviderOverride = entry.providerOverride;
     }
   }
 
@@ -266,10 +258,7 @@ export async function initSessionState(params: {
   const lastChannelRaw = (ctx.OriginatingChannel as string | undefined) || baseEntry?.lastChannel;
   const lastToRaw = ctx.OriginatingTo || ctx.To || baseEntry?.lastTo;
   const lastAccountIdRaw = ctx.AccountId || baseEntry?.lastAccountId;
-  // Only fall back to persisted threadId for thread sessions.  Non-thread
-  // sessions (e.g. DM without topics) must not inherit a stale threadId from a
-  // previous interaction that happened inside a topic/thread.
-  const lastThreadIdRaw = ctx.MessageThreadId || (isThread ? baseEntry?.lastThreadId : undefined);
+  const lastThreadIdRaw = ctx.MessageThreadId || baseEntry?.lastThreadId;
   const deliveryFields = normalizeSessionDeliveryFields({
     deliveryContext: {
       channel: lastChannelRaw,
@@ -377,6 +366,42 @@ export async function initSessionState(params: {
   await updateSessionStore(
     storePath,
     (store) => {
+      // Re-validate session freshness inside the lock.
+      // On Windows, non-atomic writes can cause the initial loadSessionStore()
+      // (outside the lock) to read a corrupted/partial file, resulting in the
+      // entry appearing absent and triggering a spurious session reset.
+      if (isNewSession && !resetTriggered) {
+        const freshStoreEntry = store[sessionKey];
+        if (freshStoreEntry?.sessionId) {
+          const isFresh = evaluateSessionFreshness({
+            updatedAt: freshStoreEntry.updatedAt,
+            now: Date.now(),
+            policy: resetPolicy,
+          }).fresh;
+          if (isFresh) {
+            // The initial read was stale — revert to existing session.
+            // IMPORTANT: only overlay delivery context from the current message;
+            // all persisted session state (thinking, model, compaction, tokens,
+            // queue settings, etc.) must come from freshStoreEntry because
+            // sessionEntry was built with baseEntry=undefined and contains
+            // explicit undefined values that would clobber the real data.
+            sessionId = freshStoreEntry.sessionId;
+            isNewSession = false;
+            systemSent = freshStoreEntry.systemSent ?? false;
+            abortedLastRun = freshStoreEntry.abortedLastRun ?? false;
+            sessionEntry = {
+              ...freshStoreEntry,
+              updatedAt: Date.now(),
+              // Only delivery routing fields from the current inbound message.
+              deliveryContext: sessionEntry.deliveryContext,
+              lastChannel: sessionEntry.lastChannel,
+              lastTo: sessionEntry.lastTo,
+              lastAccountId: sessionEntry.lastAccountId,
+              lastThreadId: sessionEntry.lastThreadId,
+            };
+          }
+        }
+      }
       // Preserve per-session overrides while resetting compaction state on /new.
       store[sessionKey] = { ...store[sessionKey], ...sessionEntry };
     },
