@@ -652,25 +652,55 @@ Store as `BOT_USERNAME`. Exclude any comment where `user.login` equals `BOT_USER
 
 **NOT actionable (skip):**
 
-- Pure approvals or "LGTM" without suggestions
+- Pure approvals or "LGTM" without suggestions: "looks good", "approved", "👍", "great work", "nice"
 - Bot comments that are informational only (CI status, auto-generated summaries without specific requests)
 - Comments already addressed (check if bot replied with "Addressed in commit...")
 - Reviews with state `APPROVED` and no inline comments requesting changes
+- **Questions without action requests:** "why did you...", "curious about...", "how does this..."
+- **Suggestions without urgency:** "you could also...", "might want to consider...", "alternative approach..."
+- **FYI/note comments:** "FYI", "note:", "for context", "just FYI"
+- **Praise/acknowledgment:** "good catch", "thanks for", "appreciate"
+- **Resolved threads:** If comment thread is marked as resolved in GitHub (check `state` field if available)
 
 **IS actionable (requires attention):**
 
 - Reviews with state `CHANGES_REQUESTED`
-- Reviews with state `COMMENTED` that contain specific requests:
-  - "this test needs to be updated"
-  - "please fix", "change this", "update", "can you", "should be", "needs to"
-  - "will fail", "will break", "causes an error"
-  - Mentions of specific code issues (bugs, missing error handling, edge cases)
-- Inline review comments pointing out issues in the code
+- Reviews with state `COMMENTED` that contain **strong action verbs**:
+  - **Fix/Change:** "fix this", "change X to Y", "remove", "add", "delete"
+  - **Test requirements:** "this test needs to be updated", "add test for", "tests are failing", "test should"
+  - **Must/Should + action:** "must fix", "should change", "needs to be", "has to"
+  - **Problem identification:** "will fail", "will break", "causes an error", "this doesn't work", "broken"
+  - **Modal + fix request:** "can you fix", "could you update", "please change" (NOT just "can you explain")
+- Inline review comments **only if they contain action verbs** from above list (not just any inline comment)
 - Embedded reviews in PR body that identify:
   - Critical issues or breaking changes
   - Test failures expected
   - Specific code that needs attention
-  - Confidence scores with concerns
+  - Confidence scores below 4/5 (indicates concerns)
+
+**Actionability confidence scoring (NEW):**
+For each comment, calculate a confidence score:
+
+```
+score = 0
+
+# Positive signals (+points)
+if (contains_action_verb(body)): score += 2
+if (state == "CHANGES_REQUESTED"): score += 3
+if (mentions_test_update(body)): score += 2
+if (mentions_failure_or_error(body)): score += 2
+if (is_inline_comment && contains_action_verb(body)): score += 1
+
+# Negative signals (-points)
+if (is_approval_phrase(body)): score -= 3
+if (is_question_only(body)): score -= 2
+if (is_suggestion_without_urgency(body)): score -= 1
+if (contains_fyi_or_note(body)): score -= 2
+if (is_praise(body)): score -= 2
+
+# Only mark as actionable if score >= 2
+actionable = (score >= 2)
+```
 
 **Parse embedded review content (e.g., Greptile):**
 Look for sections marked with `<!-- greptile_comment -->` or similar. Extract:
@@ -686,6 +716,13 @@ Look for sections marked with `<!-- greptile_comment -->` or similar. Extract:
 - Body text
 - For inline: file path and line number
 - Specific action items identified
+- **Actionability confidence score** (NEW)
+
+**Logging for debugging (optional but recommended):**
+For each comment analyzed, log:
+```
+Comment #{id} by @{author}: score={score}, actionable={true/false}, reason="{explanation}"
+```
 
 If no actionable comments found across any PR, report "No actionable review comments found" and stop (or loop back if in watch mode).
 
