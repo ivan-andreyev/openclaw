@@ -1,0 +1,27 @@
+{
+  "id": "task-lifecycle",
+  "name": "Task Lifecycle Tracking",
+  "description": "Tracks SubAgent lifecycle and updates task status via Python bridge (http://localhost:9876)",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "bridgeUrl": {
+        "type": "string"
+      },
+      "debug": {
+        "type": "boolean"
+      }
+    }
+  },
+  "uiHints": {
+    "bridgeUrl": {
+      "label": "Bridge URL",
+      "help": "HTTP endpoint for Python bridge (default: http://127.0.0.1:9876/task/complete)"
+    },
+    "debug": {
+      "label": "Debug Logging",
+      "help": "Enable detailed logging for task lifecycle events"
+    }
+  }
+}

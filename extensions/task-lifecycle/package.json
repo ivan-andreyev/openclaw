@@ -1,0 +1,38 @@
+{
+  "name": "task-lifecycle",
+  "version": "1.0.0",
+  "description": "OpenClaw plugin for tracking task lifecycle and reporting to bridge service",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "clean": "rimraf dist"
+  },
+  "keywords": [
+    "openclaw",
+    "plugin",
+    "task",
+    "lifecycle",
+    "tracking"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "openclaw": {
+    "extensions": [
+      "./dist/index.js"
+    ]
+  },
+  "dependencies": {
+    "node-fetch": "^2.7.0"
+  }
+}
