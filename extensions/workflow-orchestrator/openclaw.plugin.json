@@ -1,0 +1,9 @@
+{
+  "id": "workflow-orchestrator",
+  "name": "Workflow Orchestrator",
+  "version": "0.1.0",
+  "description": "Tracks subagents and prevents premature completion messages (Phase 1 MVP)",
+  "entry": "./dist/index.js",
+  "author": "OpenClaw",
+  "license": "MIT"
+}

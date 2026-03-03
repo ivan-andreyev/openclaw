@@ -1,26 +1,23 @@
 /**
- * Workflow Orchestrator - Main Entry Point
+ * Workflow Orchestrator Plugin - Main Entry Point
  * @module index
  */
 
-export { StateManager } from './state-manager.js';
+// Export Phase 1 plugin
+export { default } from './plugin.js';
+export { version } from './plugin.js';
+
+// Export types and utilities for testing
+export { SubagentTracker } from './subagent-tracker.js';
+export type { TrackedSubagent } from './subagent-tracker.js';
+export { registerHooks } from './hooks.js';
 export type {
-  WorkflowState,
-  WorkflowStatus,
-  WorkflowStep,
-  StepExecution,
-  StepStatus
-} from './types.js';
-
-/**
- * Workflow Orchestrator version
- */
-export const version = '0.1.0';
-
-/**
- * Initialize the orchestrator
- * This is a placeholder for future initialization logic
- */
-export function init(): void {
-  console.log('[Orchestrator] Initialized v' + version);
-}
+  OpenClawPluginApi,
+  PluginLogger,
+  PluginHookSubagentSpawnedEvent,
+  PluginHookSubagentEndedEvent,
+  PluginHookMessageSendingEvent,
+  PluginHookSubagentContext,
+  PluginHookMessageContext,
+  PluginHookMessageSendingResult,
+} from './plugin-types.js';
