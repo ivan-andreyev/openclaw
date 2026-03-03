@@ -120,6 +120,14 @@ export function registerHooks(api: OpenClawPluginApi, tracker: SubagentTracker):
     ): Promise<PluginHookMessageSendingResult | undefined> => {
       const { content, to } = event;
 
+      // Log every message to verify hook is called
+      logger.info('[workflow-orchestrator] message_sending hook fired', {
+        contentPreview: content.substring(0, 50),
+        to,
+        isCompletion: isCompletionMessage(content),
+        activeSubagents: tracker.count(),
+      });
+
       // Check if this is a completion message
       if (!isCompletionMessage(content)) {
         return undefined; // Allow non-completion messages
