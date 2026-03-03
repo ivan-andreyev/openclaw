@@ -5,5 +5,10 @@
   "description": "Tracks subagents and prevents premature completion messages (Phase 1 MVP)",
   "entry": "./dist/index.js",
   "author": "OpenClaw",
-  "license": "MIT"
+  "license": "MIT",
+  "configSchema": {
+    "type": "object",
+    "properties": {},
+    "additionalProperties": false
+  }
 }

@@ -11,7 +11,15 @@ export function clearActiveProgressLine(): void {
   if (!activeStream?.isTTY) {
     return;
   }
-  activeStream.write("\r\x1b[2K");
+  try {
+    activeStream.write("\r\x1b[2K");
+  } catch (err: unknown) {
+    // Guard against EBADF when stream FD is closed during process restart.
+    if (err && typeof err === "object" && (err as NodeJS.ErrnoException).code === "EBADF") {
+      return;
+    }
+    throw err;
+  }
 }
 
 export function unregisterActiveProgressLine(stream?: NodeJS.WriteStream): void {

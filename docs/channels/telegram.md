@@ -440,6 +440,72 @@ curl "https://api.telegram.org/bot<bot_token>/getUpdates"
 
   </Accordion>
 
+  <Accordion title="Thread-bound subagent sessions">
+    Telegram supports spawning persistent subagent sessions bound to forum topics.
+
+    **Requirements:**
+    - Forum-enabled supergroup (with topics)
+    - Spawn command executed from within a topic thread
+
+    **Enable thread-bound subagent spawns:**
+
+```json5
+{
+  channels: {
+    telegram: {
+      threadBindings: {
+        enabled: true,                    // Enable thread bindings (default: true)
+        spawnSubagentSessions: true,      // Allow spawning persistent sessions (default: false)
+      },
+    },
+  },
+}
+```
+
+    **Spawn a thread-bound subagent:**
+
+```
+/spawn task="Research latest AI papers" thread=true
+```
+
+    **Behavior:**
+    - Subagent session is bound to the current forum topic
+    - All subagent messages route to the same topic thread
+    - Completion messages auto-route to the topic
+    - Session persists for follow-up interactions within the topic
+
+    **Per-account override:**
+
+```json5
+{
+  channels: {
+    telegram: {
+      accounts: {
+        main: {
+          threadBindings: {
+            enabled: true,
+            spawnSubagentSessions: true,
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+    **Error handling:**
+    - `threadBindings.enabled=false`: "Telegram thread bindings are disabled in config"
+    - `spawnSubagentSessions=false`: "Telegram thread-bound subagent spawns are disabled"
+    - Missing `threadId`: "Telegram subagent spawn requires a valid forum topic"
+
+    **Implementation notes:**
+    - Unlike Discord, Telegram threads (forum topics) are pre-created by users
+    - No automatic thread creation or state management needed
+    - Thread context is preserved via `message_thread_id` in Telegram Bot API
+    - Session keys include topic ID: `agent:main:telegram:group:-123:topic:42:subagent:abc`
+
+  </Accordion>
+
   <Accordion title="Audio, video, and stickers">
     ### Audio messages
 
@@ -750,6 +816,10 @@ Primary reference:
 - `channels.telegram.actions.sticker`: gate Telegram sticker actions — send and search (default: false).
 - `channels.telegram.reactionNotifications`: `off | own | all` — control which reactions trigger system events (default: `own` when not set).
 - `channels.telegram.reactionLevel`: `off | ack | minimal | extensive` — control agent's reaction capability (default: `minimal` when not set).
+- `channels.telegram.threadBindings.enabled`: enable thread-bound subagent sessions (default: true).
+- `channels.telegram.threadBindings.spawnSubagentSessions`: allow spawning persistent subagent sessions in forum topics (default: false).
+- `channels.telegram.accounts.<account>.threadBindings.enabled`: per-account override for thread bindings.
+- `channels.telegram.accounts.<account>.threadBindings.spawnSubagentSessions`: per-account override for subagent spawns.
 
 - [Configuration reference - Telegram](/gateway/configuration-reference#telegram)
 
@@ -758,7 +828,7 @@ Telegram-specific high-signal fields:
 - startup/auth: `enabled`, `botToken`, `tokenFile`, `accounts.*`
 - access control: `dmPolicy`, `allowFrom`, `groupPolicy`, `groupAllowFrom`, `groups`, `groups.*.topics.*`
 - command/menu: `commands.native`, `customCommands`
-- threading/replies: `replyToMode`
+- threading/replies: `replyToMode`, `threadBindings`
 - streaming: `streaming` (preview), `blockStreaming`
 - formatting/delivery: `textChunkLimit`, `chunkMode`, `linkPreview`, `responsePrefix`
 - media/network: `mediaMaxMb`, `timeoutSeconds`, `retry`, `network.autoSelectFamily`, `proxy`
