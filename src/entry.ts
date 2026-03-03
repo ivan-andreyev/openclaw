@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { applyCliProfileEnv, parseCliProfileArgs } from "./cli/profile.js";
 import { shouldSkipRespawnForArgv } from "./cli/respawn-policy.js";
 import { normalizeWindowsArgv } from "./cli/windows-argv.js";
+import { safeErrorOutput } from "./infra/errors.js";
 import { isTruthyEnvValue, normalizeEnv } from "./infra/env.js";
 import { isMainModule } from "./infra/is-main.js";
 import { installProcessWarningFilter } from "./infra/warning-filter.js";
@@ -89,9 +90,8 @@ if (
     });
 
     child.once("error", (error) => {
-      console.error(
-        "[openclaw] Failed to respawn CLI:",
-        error instanceof Error ? (error.stack ?? error.message) : error,
+      safeErrorOutput(
+        `[openclaw] Failed to respawn CLI: ${error instanceof Error ? (error.stack ?? error.message) : error}`,
       );
       process.exit(1);
     });
@@ -106,7 +106,7 @@ if (
     const parsed = parseCliProfileArgs(process.argv);
     if (!parsed.ok) {
       // Keep it simple; Commander will handle rich help/errors after we strip flags.
-      console.error(`[openclaw] ${parsed.error}`);
+      safeErrorOutput(`[openclaw] ${parsed.error}`);
       process.exit(2);
     }
 
@@ -119,9 +119,8 @@ if (
     import("./cli/run-main.js")
       .then(({ runCli }) => runCli(process.argv))
       .catch((error) => {
-        console.error(
-          "[openclaw] Failed to start CLI:",
-          error instanceof Error ? (error.stack ?? error.message) : error,
+        safeErrorOutput(
+          `[openclaw] Failed to start CLI: ${error instanceof Error ? (error.stack ?? error.message) : error}`,
         );
         process.exitCode = 1;
       });
