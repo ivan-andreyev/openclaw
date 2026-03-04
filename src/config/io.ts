@@ -6,6 +6,7 @@ import { isDeepStrictEqual } from "node:util";
 import JSON5 from "json5";
 import { ensureOwnerDisplaySecret } from "../agents/owner-display.js";
 import { loadDotEnv } from "../infra/dotenv.js";
+import { safeErrorOutput } from "../infra/errors.js";
 import { resolveRequiredHomeDir } from "../infra/home-dir.js";
 import {
   loadShellEnvFallback,
@@ -740,8 +741,13 @@ export function createConfigIO(overrides: ConfigIoDeps = {}) {
         deps.logger.error(err.message);
         throw err;
       }
-      const error = err as { code?: string };
+      const error = err as { code?: string; message?: string };
       if (error?.code === "INVALID_CONFIG") {
+        safeErrorOutput(
+          `[openclaw] CRITICAL: Config validation failed at ${configPath} — returning empty config. ` +
+            `All agent permissions will be lost until the config is fixed. ` +
+            `Details: ${error.message ?? String(err)}`,
+        );
         return {};
       }
       deps.logger.error(`Failed to read config at ${configPath}`, err);
