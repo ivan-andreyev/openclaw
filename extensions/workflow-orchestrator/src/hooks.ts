@@ -76,7 +76,7 @@ export function registerHooks(api: OpenClawPluginApi, tracker: SubagentTracker):
 
   /**
    * Hook: subagent_ended
-   * Stop tracking when subagents complete
+   * Stop tracking when subagents complete and wake parent session
    */
   api.on(
     'subagent_ended',
@@ -103,6 +103,39 @@ export function registerHooks(api: OpenClawPluginApi, tracker: SubagentTracker):
           durationMs,
           remainingSubagents: tracker.count(),
         });
+
+        // Phase 2: Wake parent session after subagent completion
+        try {
+          if (api.gateway && typeof api.gateway.call === 'function') {
+            const wakeResult = await api.gateway.call('session.wake', {
+              sessionKey: subagent.requesterSessionKey,
+              message: `[WORKFLOW] Subagent completed (${subagent.label || subagent.agentId}): ${outcome}`,
+              priority: 'high',
+            });
+
+            if (wakeResult.ok) {
+              logger.info('[workflow-orchestrator] Woke parent session', {
+                requesterSessionKey: subagent.requesterSessionKey,
+                subagent: subagent.label || subagent.agentId,
+                outcome,
+              });
+            } else {
+              logger.warn('[workflow-orchestrator] Failed to wake parent session', {
+                requesterSessionKey: subagent.requesterSessionKey,
+                error: wakeResult.error,
+              });
+            }
+          } else {
+            logger.debug('[workflow-orchestrator] Gateway client not available yet (Phase 1)', {
+              requesterSessionKey: subagent.requesterSessionKey,
+            });
+          }
+        } catch (err) {
+          logger.error('[workflow-orchestrator] Error waking session', {
+            requesterSessionKey: subagent.requesterSessionKey,
+            error: String(err),
+          });
+        }
       }
     },
     { priority: 100 }
