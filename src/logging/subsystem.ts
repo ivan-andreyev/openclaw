@@ -228,12 +228,22 @@ function writeConsoleLine(level: LogLevel, line: string) {
       ? line.replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, "?").replace(/[\uD800-\uDFFF]/g, "?")
       : line;
   const sink = loggingState.rawConsole ?? console;
-  if (loggingState.forceConsoleToStderr || level === "error" || level === "fatal") {
-    (sink.error ?? console.error)(sanitized);
-  } else if (level === "warn") {
-    (sink.warn ?? console.warn)(sanitized);
-  } else {
-    (sink.log ?? console.log)(sanitized);
+  try {
+    if (loggingState.forceConsoleToStderr || level === "error" || level === "fatal") {
+      (sink.error ?? console.error)(sanitized);
+    } else if (level === "warn") {
+      (sink.warn ?? console.warn)(sanitized);
+    } else {
+      (sink.log ?? console.log)(sanitized);
+    }
+  } catch (err: unknown) {
+    // During full process restart, inherited file descriptors may be closed by
+    // the exiting parent before the child finishes initializing.  Swallow the
+    // resulting EBADF rather than crashing the freshly-spawned process.
+    if (err && typeof err === "object" && (err as NodeJS.ErrnoException).code === "EBADF") {
+      return;
+    }
+    throw err;
   }
 }
 

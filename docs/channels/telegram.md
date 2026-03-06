@@ -21,7 +21,7 @@ Status: production-ready for bot DMs + groups via grammY. Long polling is the de
   </Card>
 </CardGroup>
 
-## Onboarding
+## Quick setup
 
 <Steps>
   <Step title="Create the bot token in BotFather">
@@ -47,6 +47,7 @@ Status: production-ready for bot DMs + groups via grammY. Long polling is the de
 ```
 
     Env fallback: `TELEGRAM_BOT_TOKEN=...` (default account only).
+    Telegram does **not** use `openclaw channels login telegram`; configure token in config/env, then start gateway.
 
   </Step>
 
@@ -148,6 +149,7 @@ curl "https://api.telegram.org/bot<bot_token>/getUpdates"
 
     `groupAllowFrom` is used for group sender filtering. If not set, Telegram falls back to `allowFrom`.
     `groupAllowFrom` entries must be numeric Telegram user IDs.
+    Runtime note: if `channels.telegram` is completely missing, runtime falls back to `groupPolicy="allowlist"` for group policy evaluation (even if `channels.defaults.groupPolicy` is set).
 
     Example: allow any member in one specific group:
 
@@ -226,21 +228,9 @@ curl "https://api.telegram.org/bot<bot_token>/getUpdates"
 
     Requirement:
 
-    - `channels.telegram.streamMode` is not `"off"` (default: `"partial"`)
-
-    Modes:
-
-    - `off`: no live preview
-    - `partial`: frequent preview updates from partial text
-    - `block`: chunked preview updates using `channels.telegram.draftChunk`
-
-    `draftChunk` defaults for `streamMode: "block"`:
-
-    - `minChars: 200`
-    - `maxChars: 800`
-    - `breakPreference: "paragraph"`
-
-    `maxChars` is clamped by `channels.telegram.textChunkLimit`.
+    - `channels.telegram.streaming` is `off | partial | block | progress` (default: `off`)
+    - `progress` maps to `partial` on Telegram (compat with cross-channel naming)
+    - legacy `channels.telegram.streamMode` and boolean `streaming` values are auto-mapped
 
     This works in direct chats and groups/topics.
 
@@ -248,7 +238,7 @@ curl "https://api.telegram.org/bot<bot_token>/getUpdates"
 
     For complex replies (for example media payloads), OpenClaw falls back to normal final delivery and then cleans up the preview message.
 
-    `streamMode` is separate from block streaming. When block streaming is explicitly enabled for Telegram, OpenClaw skips the preview stream to avoid double-streaming.
+    Preview streaming is separate from block streaming. When block streaming is explicitly enabled for Telegram, OpenClaw skips the preview stream to avoid double-streaming.
 
     Telegram-only reasoning stream:
 
@@ -447,6 +437,72 @@ curl "https://api.telegram.org/bot<bot_token>/getUpdates"
     DM thread behavior:
 
     - private chats with `message_thread_id` keep DM routing but use thread-aware session keys/reply targets.
+
+  </Accordion>
+
+  <Accordion title="Thread-bound subagent sessions">
+    Telegram supports spawning persistent subagent sessions bound to forum topics.
+
+    **Requirements:**
+    - Forum-enabled supergroup (with topics)
+    - Spawn command executed from within a topic thread
+
+    **Enable thread-bound subagent spawns:**
+
+```json5
+{
+  channels: {
+    telegram: {
+      threadBindings: {
+        enabled: true,                    // Enable thread bindings (default: true)
+        spawnSubagentSessions: true,      // Allow spawning persistent sessions (default: false)
+      },
+    },
+  },
+}
+```
+
+    **Spawn a thread-bound subagent:**
+
+```
+/spawn task="Research latest AI papers" thread=true
+```
+
+    **Behavior:**
+    - Subagent session is bound to the current forum topic
+    - All subagent messages route to the same topic thread
+    - Completion messages auto-route to the topic
+    - Session persists for follow-up interactions within the topic
+
+    **Per-account override:**
+
+```json5
+{
+  channels: {
+    telegram: {
+      accounts: {
+        main: {
+          threadBindings: {
+            enabled: true,
+            spawnSubagentSessions: true,
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+    **Error handling:**
+    - `threadBindings.enabled=false`: "Telegram thread bindings are disabled in config"
+    - `spawnSubagentSessions=false`: "Telegram thread-bound subagent spawns are disabled"
+    - Missing `threadId`: "Telegram subagent spawn requires a valid forum topic"
+
+    **Implementation notes:**
+    - Unlike Discord, Telegram threads (forum topics) are pre-created by users
+    - No automatic thread creation or state management needed
+    - Thread context is preserved via `message_thread_id` in Telegram Bot API
+    - Session keys include topic ID: `agent:main:telegram:group:-123:topic:42:subagent:abc`
 
   </Accordion>
 
@@ -682,6 +738,29 @@ openclaw message send --channel telegram --target @name --message "hi"
 
     - Node 22+ + custom fetch/proxy can trigger immediate abort behavior if AbortSignal types mismatch.
     - Some hosts resolve `api.telegram.org` to IPv6 first; broken IPv6 egress can cause intermittent Telegram API failures.
+    - If logs include `TypeError: fetch failed` or `Network request for 'getUpdates' failed!`, OpenClaw now retries these as recoverable network errors.
+    - On VPS hosts with unstable direct egress/TLS, route Telegram API calls through `channels.telegram.proxy`:
+
+```yaml
+channels:
+  telegram:
+    proxy: socks5://user:pass@proxy-host:1080
+```
+
+    - Node 22+ defaults to `autoSelectFamily=true` (except WSL2) and `dnsResultOrder=ipv4first`.
+    - If your host is WSL2 or explicitly works better with IPv4-only behavior, force family selection:
+
+```yaml
+channels:
+  telegram:
+    network:
+      autoSelectFamily: false
+```
+
+    - Environment overrides (temporary):
+      - `OPENCLAW_TELEGRAM_DISABLE_AUTO_SELECT_FAMILY=1`
+      - `OPENCLAW_TELEGRAM_ENABLE_AUTO_SELECT_FAMILY=1`
+      - `OPENCLAW_TELEGRAM_DNS_RESULT_ORDER=ipv4first`
     - Validate DNS answers:
 
 ```bash
@@ -721,10 +800,11 @@ Primary reference:
 - `channels.telegram.textChunkLimit`: outbound chunk size (chars).
 - `channels.telegram.chunkMode`: `length` (default) or `newline` to split on blank lines (paragraph boundaries) before length chunking.
 - `channels.telegram.linkPreview`: toggle link previews for outbound messages (default: true).
-- `channels.telegram.streamMode`: `off | partial | block` (live stream preview).
+- `channels.telegram.streaming`: `off | partial | block | progress` (live stream preview; default: `off`; `progress` maps to `partial`).
 - `channels.telegram.mediaMaxMb`: inbound/outbound media cap (MB).
 - `channels.telegram.retry`: retry policy for outbound Telegram API calls (attempts, minDelayMs, maxDelayMs, jitter).
-- `channels.telegram.network.autoSelectFamily`: override Node autoSelectFamily (true=enable, false=disable). Defaults to disabled on Node 22 to avoid Happy Eyeballs timeouts.
+- `channels.telegram.network.autoSelectFamily`: override Node autoSelectFamily (true=enable, false=disable). Defaults to enabled on Node 22+, with WSL2 defaulting to disabled.
+- `channels.telegram.network.dnsResultOrder`: override DNS result order (`ipv4first` or `verbatim`). Defaults to `ipv4first` on Node 22+.
 - `channels.telegram.proxy`: proxy URL for Bot API calls (SOCKS/HTTP).
 - `channels.telegram.webhookUrl`: enable webhook mode (requires `channels.telegram.webhookSecret`).
 - `channels.telegram.webhookSecret`: webhook secret (required when webhookUrl is set).
@@ -736,6 +816,10 @@ Primary reference:
 - `channels.telegram.actions.sticker`: gate Telegram sticker actions — send and search (default: false).
 - `channels.telegram.reactionNotifications`: `off | own | all` — control which reactions trigger system events (default: `own` when not set).
 - `channels.telegram.reactionLevel`: `off | ack | minimal | extensive` — control agent's reaction capability (default: `minimal` when not set).
+- `channels.telegram.threadBindings.enabled`: enable thread-bound subagent sessions (default: true).
+- `channels.telegram.threadBindings.spawnSubagentSessions`: allow spawning persistent subagent sessions in forum topics (default: false).
+- `channels.telegram.accounts.<account>.threadBindings.enabled`: per-account override for thread bindings.
+- `channels.telegram.accounts.<account>.threadBindings.spawnSubagentSessions`: per-account override for subagent spawns.
 
 - [Configuration reference - Telegram](/gateway/configuration-reference#telegram)
 
@@ -744,8 +828,8 @@ Telegram-specific high-signal fields:
 - startup/auth: `enabled`, `botToken`, `tokenFile`, `accounts.*`
 - access control: `dmPolicy`, `allowFrom`, `groupPolicy`, `groupAllowFrom`, `groups`, `groups.*.topics.*`
 - command/menu: `commands.native`, `customCommands`
-- threading/replies: `replyToMode`
-- streaming: `streamMode` (preview), `draftChunk`, `blockStreaming`
+- threading/replies: `replyToMode`, `threadBindings`
+- streaming: `streaming` (preview), `blockStreaming`
 - formatting/delivery: `textChunkLimit`, `chunkMode`, `linkPreview`, `responsePrefix`
 - media/network: `mediaMaxMb`, `timeoutSeconds`, `retry`, `network.autoSelectFamily`, `proxy`
 - webhook: `webhookUrl`, `webhookSecret`, `webhookPath`, `webhookHost`

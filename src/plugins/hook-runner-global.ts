@@ -31,8 +31,9 @@ export function initializeGlobalHookRunner(registry: PluginRegistry): void {
   });
 
   const hookCount = registry.hooks.length;
-  if (hookCount > 0) {
-    log.info(`hook runner initialized with ${hookCount} registered hooks`);
+  const typedHookCount = registry.typedHooks.length;
+  if (hookCount > 0 || typedHookCount > 0) {
+    log.info(`hook runner initialized with ${hookCount} registered hooks (legacy), ${typedHookCount} typed hooks`);
   }
 }
 

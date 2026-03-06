@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { redactSensitiveText } from "../logging/redact.js";
 
 export function extractErrorCode(err: unknown): string | undefined {
@@ -56,4 +58,42 @@ export function formatUncaughtError(err: unknown): string {
     return redactSensitiveText(stack);
   }
   return formatErrorMessage(err);
+}
+
+/**
+ * Best-effort error output that survives closed file descriptors (EBADF).
+ *
+ * Tries console.error first.  When stdout/stderr FDs are already closed
+ * (e.g. during full process restart with inherited stdio), falls back to
+ * appending directly to the rolling log file via `fs.appendFileSync`.
+ * If even that fails the message is silently dropped — crashing here would
+ * only make things worse.
+ */
+export function safeErrorOutput(message: string): void {
+  try {
+    console.error(message);
+    return;
+  } catch (consoleErr: unknown) {
+    if (
+      !(consoleErr && typeof consoleErr === "object" &&
+        (consoleErr as NodeJS.ErrnoException).code === "EBADF")
+    ) {
+      throw consoleErr;
+    }
+  }
+
+  // console is dead (EBADF) — fall back to direct file append.
+  try {
+    const tmpBase =
+      process.env.OPENCLAW_TMP_DIR ??
+      (process.platform === "win32"
+        ? path.join(process.env.TEMP ?? "C:\\tmp", "openclaw")
+        : "/tmp/openclaw");
+    const today = new Date().toISOString().slice(0, 10);
+    const logPath = path.join(tmpBase, `openclaw-${today}.log`);
+    fs.mkdirSync(tmpBase, { recursive: true });
+    fs.appendFileSync(logPath, `${new Date().toISOString()} ${message}\n`);
+  } catch {
+    // Nothing left to do — swallow silently rather than crash.
+  }
 }

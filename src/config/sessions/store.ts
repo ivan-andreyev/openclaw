@@ -538,7 +538,29 @@ async function saveSessionStoreUnlocked(
   // We serialize writers via the session-store lock instead.
   if (process.platform === "win32") {
     try {
-      await fs.promises.writeFile(storePath, json, "utf-8");
+      await fs.promises.writeFile(tmp, json, "utf-8");
+      // Retry rename up to 5 times with increasing backoff — rename can fail
+      // on Windows when the target is locked by a concurrent reader.  We do
+      // NOT fall back to writeFile or copyFile because both use CREATE_ALWAYS
+      // on Windows, which truncates the target to 0 bytes before writing —
+      // reintroducing the exact race this fix addresses.  If all attempts
+      // fail, the temp file is cleaned up and the next save cycle (which is
+      // serialized by the write lock) will succeed.
+      for (let i = 0; i < 5; i++) {
+        try {
+          await fs.promises.rename(tmp, storePath);
+          break;
+        } catch {
+          if (i < 4) {
+            await new Promise((r) => setTimeout(r, 50 * (i + 1)));
+          }
+          // Final attempt failed — skip this save.  The write lock ensures
+          // the next save will retry with fresh data.  Log for diagnostics.
+          if (i === 4) {
+            log.warn(`rename failed after 5 attempts: ${storePath}`);
+          }
+        }
+      }
     } catch (err) {
       const code =
         err && typeof err === "object" && "code" in err
@@ -772,7 +794,7 @@ export async function updateSessionStoreEntry(params: {
 }): Promise<SessionEntry | null> {
   const { storePath, sessionKey, update } = params;
   return await withSessionStoreLock(storePath, async () => {
-    const store = loadSessionStore(storePath);
+    const store = loadSessionStore(storePath, { skipCache: true });
     const existing = store[sessionKey];
     if (!existing) {
       return null;

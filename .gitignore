@@ -17,6 +17,8 @@ __pycache__/
 ui/src/ui/__screenshots__/
 ui/playwright-report/
 ui/test-results/
+packages/dashboard-next/.next/
+packages/dashboard-next/out/
 
 # Android build artifacts
 apps/android/.gradle/
@@ -85,3 +87,14 @@ USER.md
 /local/
 package-lock.json
 /.claude/settings.local.json
+.claude/settings.local.json
+.agents/
+.agents
+.agent/
+
+# Local iOS signing overrides
+apps/ios/LocalSigning.xcconfig
+# Generated protocol schema (produced via pnpm protocol:gen)
+dist/protocol.schema.json
+.ant-colony/
+>>>>>>> origin/feature/orchestrator-phase1
