@@ -72,6 +72,9 @@ export const telegramMessageActions: ChannelMessageActionAdapter = {
     if (gate("createForumTopic")) {
       actions.add("topic-create");
     }
+    if (gate("memberInfo", false)) {
+      actions.add("member-info");
+    }
     return Array.from(actions);
   },
   supportsButtons: ({ cfg }) => {
@@ -217,6 +220,21 @@ export const telegramMessageActions: ChannelMessageActionAdapter = {
           name,
           iconColor: iconColor ?? undefined,
           iconCustomEmojiId: iconCustomEmojiId ?? undefined,
+          accountId: accountId ?? undefined,
+        },
+        cfg,
+      );
+    }
+
+    if (action === "member-info") {
+      const chatId =
+        readStringOrNumberParam(params, "chatId") ??
+        readStringOrNumberParam(params, "channelId") ??
+        readStringParam(params, "to", { required: true });
+      return await handleTelegramAction(
+        {
+          action: "memberInfo",
+          chatId,
           accountId: accountId ?? undefined,
         },
         cfg,

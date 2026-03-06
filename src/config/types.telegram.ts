@@ -20,6 +20,8 @@ export type TelegramActionConfig = {
   sticker?: boolean;
   /** Enable forum topic creation. */
   createForumTopic?: boolean;
+  /** Enable member-info action to retrieve chat administrators. */
+  memberInfo?: boolean;
 };
 
 export type TelegramNetworkConfig = {
